@@ -171,7 +171,7 @@ public class MarinerTest {
 	    			while (connected) {
 	    				// u19 SYNC_TIME
 	    				System.out.println("Send SYNC_TIME");
-	    				mar.getMessageManager().sendUPC("u9");
+	    				mar.getMessageManager().sendUPC("u19");
 	    				sleep(10000);
 	    			}
 	    		} catch (Exception e) 
@@ -179,15 +179,10 @@ public class MarinerTest {
 	    			System.out.println("Error in send SYNC_TIME: "+e);
 	    		}
 	    	}
-	    };//.start();
+	    }.start();
 
-	    new Thread() {
-	    	public void run() {
-	    		createRoom();
-	    	}
-	    };//.start();
 	}
-	public void createRoom() {
+	public void createRoom(String roomID) {
 		//logger.debug("request room");
 		// dur, CREATE_ROOM is u24
 		System.out.println("Create room...");
@@ -195,7 +190,7 @@ public class MarinerTest {
 		//roomSettingName1[RS]roomSettingValue1 [RS] roomSettingNamen[RS]roomSettingValuen
 		//attrName1[RS]attrVal1[RS]attrOptions [RS] attrName2[RS]attrVal2[RS]attrOptions [RS]...attrNamen[RS]attrValn[RS]attrOptions
 		//CLASS[RS]qualifiedClassName1 [RS] CLASS[RS]qualifiedClassNamen [RS] SCRIPT[RS]pathToScript1 [RS] SCRIPT[RS]pathToScriptn
-		mar.getMessageManager().sendUPC("u24", "cmg.chatRoom", "", "", ""); // create a room called "chatRoom" with default settings, no attributes, and no room modules
+		mar.getMessageManager().sendUPC("u24", roomID, "", "", ""); // create a room called "chatRoom" with default settings, no attributes, and no room modules
 	}
 	public void onMessage(MessageEvent evt) {
 		System.out.println("Message: "+evt.getUPCMessage());
@@ -208,10 +203,13 @@ public class MarinerTest {
 		String status = evt.getUPCMessage().getArgText(1);
 	    System.out.println("CLIENT_ROOM_RESULT: room=" + roomID + " status=" + status);
 	    
+	    joinRoom(roomID);
+	}
+	public void joinRoom(String roomID) {
 	    System.out.println("Join room...");
 	    // u3 JOIN_ROOM
 	    // roomID, password
-	    mar.getMessageManager().sendUPC("u3", roomID, "");
+	    mar.getMessageManager().sendUPC("u4", roomID, "");
 	    // returns u72
 	}
 	public void onJoinedRoom(MessageEvent evt) {
@@ -252,7 +250,8 @@ public class MarinerTest {
 		// (no args)
 	    System.out.println("CLIENT_READY");
 
-	    createRoom();
+	    //createRoom();
+	    createRoom("cmg.chatRoom");
 	}
 	public void onServerTimeUpdate(MessageEvent evt) {
 		// u50 SERVER_TIME_UPDATE

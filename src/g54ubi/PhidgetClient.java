@@ -76,7 +76,7 @@ public class PhidgetClient {
 	public static void main(String[] args) {
 		// TODO Auto-generated method stub
 		try {
-			final String serverID = "mrlphidgetsbc1";
+			final String serverID = (args.length>0 ? args[0] : null); //"mrlphidgetsbc1";
 			
 			Manager man;
 			System.out.println(Phidget.getLibraryVersion());

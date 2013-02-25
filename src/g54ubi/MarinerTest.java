@@ -80,6 +80,7 @@ public class MarinerTest {
 	    mar.getMessageManager().addEventListener("u72", this, "onJoinRoomResult"); 
 	    // u73 SET_CLIENT_ATTR_RESULT
 	    // u74 SET_ROOM_ATTR_RESULT
+	    mar.getMessageManager().addEventListener("u74", this, "onSetRoomAttrResult"); 
 	    // u75 GET_CLIENTCOUNT_SNAPSHOT_RESULT
 	    // u76 LEAVE_ROOM_RESULT
 	    // u77 OBSERVE_ROOM_RESULT
@@ -225,7 +226,22 @@ public class MarinerTest {
 		String roomID = evt.getUPCMessage().getArgText(0);
 		String status = evt.getUPCMessage().getArgText(1);
 	    System.out.println("JOIN_ROOM_RESULT: room=" + roomID + " status=" + status);
+	    setRoomAttr(roomID, "value", "test");
 	}	    
+	public void setRoomAttr(String roomID, String name, String value) {
+		System.out.println("SET_ROOM_ATTR "+roomID+" "+name+" = "+value);
+		// u5 SET_ROOM_ATTR
+		//roomID
+		//attrName
+		//escapedAttrValue
+		//attrOptions, an integer whose bits have the following meaning when set:
+		// 2 - shared
+		// 3 - persistent
+		// 8 - evaluate
+		// shared
+		String escapedValue = value.replace("<[CDATA[","<([CDATA[").replace("]]>","]])>");
+	    mar.getMessageManager().sendUPC("u5", roomID, name, escapedValue, Integer.toString(0x04));
+	}
 	public void onServerHello(MessageEvent evt) {
 		// u66 SERVER_HELLO
 		//serverVersion
@@ -276,6 +292,14 @@ public class MarinerTest {
 		//attrName
 		//attrVal
 	    System.out.println("ROOM_ATTR_UPDATE: " + evt.getUPCMessage());
+
+	}
+	public void onSetRoomAttrResult(MessageEvent evt) {
+		// u74
+		// roomID
+		// attrName
+		// status
+	    System.out.println("SET_ROOM_ATTR_RESULT: " + evt.getUPCMessage());
 
 	}
 	public void onSessionTerminated(MessageEvent evt) {

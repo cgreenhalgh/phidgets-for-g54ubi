@@ -1,7 +1,5 @@
 package g54ubi;
 
-import java.util.ArrayList;
-
 import org.apache.log4j.Logger;
 
 import net.user1.mariner.Mariner;
@@ -150,7 +148,7 @@ public class MarinerTest {
 	    // u166 NODELIST_SNAPSHOT
 	    // u168 GATEWAYS_SNAPSHOT
 	    
-	    System.out.println("Preparing to connect.....");
+	    System.out.println("open...");
 
 	    mar.open("tryunion.com", 80);
 	    // this should ave sent a u65 (CLIENT_HELLO)
@@ -158,10 +156,11 @@ public class MarinerTest {
 	}
 	public void onConnectionShutdown(MarinerEvent evt) {
 		System.out.println("Connection shutdown");
+		close();
 	}
 	public void onConnectionReady(MarinerEvent evt) {
 
-	    System.out.println("Connection established.");
+	    System.out.println("Connection ready.");
 
 	    // start polling thread doing SYNC_TIME
 	    connected = true;
@@ -186,12 +185,13 @@ public class MarinerTest {
 	public void createRoom(String roomID) {
 		//logger.debug("request room");
 		// dur, CREATE_ROOM is u24
-		System.out.println("Create room...");
+		System.out.println("Send CREATE_ROOM...");
 		//roomID
 		//roomSettingName1[RS]roomSettingValue1 [RS] roomSettingNamen[RS]roomSettingValuen
 		//attrName1[RS]attrVal1[RS]attrOptions [RS] attrName2[RS]attrVal2[RS]attrOptions [RS]...attrNamen[RS]attrValn[RS]attrOptions
 		//CLASS[RS]qualifiedClassName1 [RS] CLASS[RS]qualifiedClassNamen [RS] SCRIPT[RS]pathToScript1 [RS] SCRIPT[RS]pathToScriptn
 		mar.getMessageManager().sendUPC("u24", roomID, "", "", ""); // create a room called "chatRoom" with default settings, no attributes, and no room modules
+		setRoomAttr(roomID, ATTR_NAME, "test"+System.currentTimeMillis());
 	}
 	public void onMessage(MessageEvent evt) {
 		System.out.println("Message: "+evt.getUPCMessage());
@@ -204,10 +204,11 @@ public class MarinerTest {
 		String status = evt.getUPCMessage().getArgText(1);
 	    System.out.println("CLIENT_ROOM_RESULT: room=" + roomID + " status=" + status);
 	    
-	    joinRoom(roomID);
+	    //joinRoom(roomID);
+	    //setRoomAttr(roomID, ATTR_NAME, "test"+System.currentTimeMillis());
 	}
 	public void joinRoom(String roomID) {
-	    System.out.println("Join room...");
+	    System.out.println("Send JOIN_ROOM...");
 	    // u3 JOIN_ROOM
 	    // roomID, password
 	    mar.getMessageManager().sendUPC("u4", roomID, "");
@@ -226,10 +227,10 @@ public class MarinerTest {
 		String roomID = evt.getUPCMessage().getArgText(0);
 		String status = evt.getUPCMessage().getArgText(1);
 	    System.out.println("JOIN_ROOM_RESULT: room=" + roomID + " status=" + status);
-	    setRoomAttr(roomID, "value", "test");
+	    setRoomAttr(roomID, ATTR_NAME, "test"+System.currentTimeMillis());
 	}	    
 	public void setRoomAttr(String roomID, String name, String value) {
-		System.out.println("SET_ROOM_ATTR "+roomID+" "+name+" = "+value);
+		System.out.println("Send SET_ROOM_ATTR "+roomID+" "+name+" = "+value);
 		// u5 SET_ROOM_ATTR
 		//roomID
 		//attrName
@@ -261,13 +262,15 @@ public class MarinerTest {
 	    mMyId = Integer.parseInt(evt.getUPCMessage().getArgText(0));
 	    System.out.println("ClientID = "+mMyId);
 	}
+	static String ROOM_NAME = "uk.ac.notttingham.module.g54ubi.uniontest1";
+	static String ATTR_NAME = "value1";
 	public void onClientReady(MessageEvent evt) {
 		// u63 CLIENT_READY
 		// (no args)
 	    System.out.println("CLIENT_READY");
 
 	    //createRoom();
-	    createRoom("cmg.chatRoom");
+	    createRoom(ROOM_NAME);
 	}
 	public void onServerTimeUpdate(MessageEvent evt) {
 		// u50 SERVER_TIME_UPDATE
@@ -305,6 +308,16 @@ public class MarinerTest {
 	public void onSessionTerminated(MessageEvent evt) {
 		// u84 SESSION_TERMINATED
 		System.out.println("SESSION_TERMINATED!");
+		close();
+	}
+	public void close() {
+		connected = false;			
+		try {
+			mar.close();
+		}
+		catch(Exception e) {
+			System.err.println("Error closing Mariner: "+e);
+		}
 	}
 	public static void main(String args[]) {
 

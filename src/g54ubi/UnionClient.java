@@ -17,6 +17,8 @@ public class UnionClient {
 	private static final String VALUE_ATTR = "value";
 
 	private static final String DELTA_VALUE_ATTR = "delta";
+
+	private static final long WAIT_CONNECT_TIME = 30000;
 	
 	private Mariner mar;
 	private State state;
@@ -60,7 +62,7 @@ public class UnionClient {
 	    	}
 	    }
 	    mar.open(host, port);
-	    System.out.println("(open...)");
+	    System.out.println("(open..., isReady="+mar.isReady()+")");
 	    // this should ave sent a u65 (CLIENT_HELLO)
 	    // in return we should get u66, then if OK u29 (CLIENT_METADATA: clientID), u63 (CLIENT_READY)
 	}
@@ -198,87 +200,107 @@ public class UnionClient {
 		}.start();
 
 		UnionClient client = new UnionClient(sync);
-		client.connect();
-		State state = State.NEW;
-		synchronized (sync) {
-			synchronized (client) {
-				state=client.state;
-			}
-			while (state==State.CONNECTING) {
-				try {
-					sync.wait();
-				} catch (InterruptedException e) {
-					// TODO Auto-generated catch block
-					System.out.println("client.wait interrupted");
+		while (true) {
+			try {
+				long startTime = System.currentTimeMillis();
+				client.connect();
+				State state = State.NEW;
+				synchronized (sync) {
+					synchronized (client) {
+						state=client.state;
+					}
+					while (state==State.CONNECTING) {
+						try {
+							long now = System.currentTimeMillis();
+							long elapsed = now-startTime;
+							if (elapsed<WAIT_CONNECT_TIME)
+								sync.wait(WAIT_CONNECT_TIME-elapsed);
+							else
+								client.close();
+						} catch (InterruptedException e) {
+							// TODO Auto-generated catch block
+							System.out.println("client.wait interrupted");
+						}
+						synchronized (client) {
+							state=client.state;
+						}
+					}
 				}
-				synchronized (client) {
-					state=client.state;
+				System.out.println("State: "+state);
+				long lastSendTime = System.currentTimeMillis();
+	
+				for (String valueId : values.getValueIds()) {
+					Value value = values.getValue(valueId);
+					if (value!=null)
+						value.resetPublished();
 				}
-			}
-		}
-		System.out.println("State: "+state);
-		long lastSendTime = System.currentTimeMillis();
-		
-		for (String valueId : values.getValueIds()) {
-			Value value = values.getValue(valueId);
-			if (value!=null)
-				value.resetPublished();
-		}
-		long lastUpdateDone = 0;
-		
-		while (state==State.CONNECTED) {
-			synchronized (sync) {
-				boolean uptodate = false;
-				synchronized (client) {
-					state = client.state;
-					uptodate = (client.responseCount==client.requestCount);					
-				}
-				if (state==State.CONNECTED) {
-					// check values
-					long lastUpdate = values.getLastUpdate();
-					//System.out.println("State="+state+", response="+client.responseCount+", request="+client.requestCount+", uptodate="+uptodate+", lastUpdate="+lastUpdate+", lastUpdateDone="+lastUpdateDone);
-					if (uptodate && lastUpdate!=lastUpdateDone) {	
-						lastUpdateDone = lastUpdate;
-						System.out.println("Update to "+lastUpdate);
-						for (String valueId : values.getValueIds()) {
-							Value value = values.getValue(valueId);
-							if (value!=null) {
-								if (!value.isPublished()) {
-									String room = value.getName();
-									client.createRoom(room);
-									String svalue = value.publish();									
-									client.setRoomAttr(room, VALUE_ATTR, svalue);
-									double dvalue = value.takeValueChange();
-									client.setRoomAttr(room, DELTA_VALUE_ATTR, Double.toString(dvalue));
+				long lastUpdateDone = 0;
+	
+				while (state==State.CONNECTED) {
+					synchronized (sync) {
+						boolean uptodate = false;
+						synchronized (client) {
+							state = client.state;
+							uptodate = (client.responseCount==client.requestCount);					
+						}
+						if (state==State.CONNECTED) {
+							// check values
+							long lastUpdate = values.getLastUpdate();
+							//System.out.println("State="+state+", response="+client.responseCount+", request="+client.requestCount+", uptodate="+uptodate+", lastUpdate="+lastUpdate+", lastUpdateDone="+lastUpdateDone);
+							if (uptodate && lastUpdate!=lastUpdateDone) {	
+								lastUpdateDone = lastUpdate;
+								System.out.println("Update to "+lastUpdate);
+								for (String valueId : values.getValueIds()) {
+									Value value = values.getValue(valueId);
+									if (value!=null) {
+										if (!value.isPublished()) {
+											String room = value.getName();
+											client.createRoom(room);
+											String svalue = value.publish();									
+											client.setRoomAttr(room, VALUE_ATTR, svalue);
+											double dvalue = value.takeValueChange();
+											client.setRoomAttr(room, DELTA_VALUE_ATTR, Double.toString(dvalue));
+											lastSendTime = System.currentTimeMillis();
+										}
+										else if (value.isUpdated()) {
+											String room = value.getName();
+											String svalue = value.publish();
+											client.setRoomAttr(room, VALUE_ATTR, svalue);
+											double dvalue = value.takeValueChange();
+											client.setRoomAttr(room, DELTA_VALUE_ATTR, Double.toString(dvalue));
+											lastSendTime = System.currentTimeMillis();
+										}
+									}
+								}
+							}
+							try {
+								long now = System.currentTimeMillis();
+								long elapsed = now-lastSendTime;
+								if (elapsed<10000) {
+									sync.wait(100);
+								}
+								else {
+									client.syncTime();
 									lastSendTime = System.currentTimeMillis();
 								}
-								else if (value.isUpdated()) {
-									String room = value.getName();
-									String svalue = value.publish();
-									client.setRoomAttr(room, VALUE_ATTR, svalue);
-									double dvalue = value.takeValueChange();
-									client.setRoomAttr(room, DELTA_VALUE_ATTR, Double.toString(dvalue));
-									lastSendTime = System.currentTimeMillis();
-								}
+							} catch (InterruptedException e) {
+								System.out.println("client.wait interrupted (2)");
 							}
 						}
 					}
-					try {
-						long now = System.currentTimeMillis();
-						long elapsed = now-lastSendTime;
-						if (elapsed<10000) {
-							sync.wait(100);
-						}
-						else {
-							client.syncTime();
-							lastSendTime = System.currentTimeMillis();
-						}
-					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
-						System.out.println("client.wait interrupted (2)");
-					}
 				}
 			}
+			catch(Exception e) {
+				System.err.println("Error: "+e);
+				e.printStackTrace(System.err);
+			}
+			System.out.println("Union client failed");
+			try {
+				Thread.sleep(3000);
+			}
+			catch (Exception e) {				
+			}
+			System.out.println("Union client retry...");
 		}
 	}
 

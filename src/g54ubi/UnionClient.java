@@ -12,7 +12,11 @@ import net.user1.mariner.MessageEvent;
  *
  */
 public class UnionClient {
-	static enum State { NEW, CONNECTING, CONNECTED, FAILED };
+	static enum State { NEW, CONNECTING, CONNECTED, FAILED }
+
+	private static final String VALUE_ATTR = "value";
+
+	private static final String DELTA_VALUE_ATTR = "delta";
 	
 	private Mariner mar;
 	private State state;
@@ -21,6 +25,11 @@ public class UnionClient {
 	private int port = 80;
 	private int requestCount = 0;
 	private int responseCount = 0;
+	private Object sync;
+	
+	UnionClient(Object sync) {
+		this.sync = sync;
+	}
 	
 	private void connect() {
 		
@@ -44,9 +53,11 @@ public class UnionClient {
 	    
 	    System.out.println("open...");
 
-	    synchronized (this) {
-	    	state = State.CONNECTING;
-	    	this.notifyAll();
+	    synchronized (sync) {
+	    	synchronized (this) {
+	    		state = State.CONNECTING;
+	    		sync.notifyAll();
+	    	}
 	    }
 	    mar.open(host, port);
 	    System.out.println("(open...)");
@@ -68,9 +79,11 @@ public class UnionClient {
 		close();
 	}
 	public void close() {
-	    synchronized (this) {
-	    	state = State.FAILED;
-	    	this.notifyAll();
+		synchronized (sync) {
+			synchronized (this) {
+	    		state = State.FAILED;
+	    		sync.notifyAll();
+	    	}
 	    }
 		try {
 			mar.close();
@@ -83,14 +96,15 @@ public class UnionClient {
 	    System.out.println("Connection ready.");
 
 	    // start polling thread doing SYNC_TIME
-	    synchronized (this) {
-	    	if (state==State.CONNECTING) {
-	    		state = State.CONNECTED;
-	    		this.notifyAll();
-	    	}
-	    	else {
-	    		System.err.println("Received onConnectionReady in invalid state "+state);
-	    		close();
+    	synchronized (sync) {
+    		synchronized (this) {
+	    		if (state==State.CONNECTING) {
+	    			state = State.CONNECTED;
+	    			sync.notifyAll();
+	    		}
+	    		else {
+	    			System.err.println("Received onConnectionReady in invalid state "+state);
+	    		}
 	    	}
 	    }
 	}
@@ -132,9 +146,9 @@ public class UnionClient {
 		// shared
 		String escapedValue = value.replace("<[CDATA[","<([CDATA[").replace("]]>","]])>");
 	    mar.getMessageManager().sendUPC("u5", roomID, name, escapedValue, Integer.toString(0x04));
-		synchronized (this) {
-			requestCount++;
-		}
+	    synchronized (this) {
+	    	requestCount++;
+    	}
 	}
 	public void onSetRoomAttrResult(MessageEvent evt) {
 		// u74
@@ -142,10 +156,12 @@ public class UnionClient {
 		// attrName
 		// status
 	    System.out.println("SET_ROOM_ATTR_RESULT: " + evt.getUPCMessage());
-	    synchronized (this) {
-	    	responseCount++;
-	    	if (responseCount>=requestCount)
-	    		this.notifyAll();
+    	synchronized (sync) {
+    		synchronized (this) {
+	    		responseCount++;
+	    		if (responseCount>=requestCount)
+	    			sync.notifyAll();
+	    	}
 	    }
 	}
 	public void syncTime() {
@@ -159,41 +175,109 @@ public class UnionClient {
 		// u50 SERVER_TIME_UPDATE
 		// timeOnServer
 		System.out.println("SERVER_TIME_UPDATE: "+evt.getUPCMessage().getArgText(0));
+    	synchronized (sync) {
+    		synchronized (this) {
+	    		responseCount++;
+	    		if (responseCount>=requestCount)
+	    			sync.notifyAll();
+	    	}
+	    }
 	}
 	
 	/**
 	 * @param args
 	 */
 	public static void main(String[] args) {
-		// TODO Auto-generated method stub
-		UnionClient client = new UnionClient();
+		Object sync = new Object();
+		final ValueSet values = new ValueSet(sync);
+		
+		new Thread() {
+			public void run() {
+				PhidgetClient.run(new String[0], values);
+			}
+		}.start();
+
+		UnionClient client = new UnionClient(sync);
 		client.connect();
 		State state = State.NEW;
-		synchronized (client) {
-			while ((state=client.state)==State.CONNECTING)
+		synchronized (sync) {
+			synchronized (client) {
+				state=client.state;
+			}
+			while (state==State.CONNECTING) {
 				try {
-					client.wait();
+					sync.wait();
 				} catch (InterruptedException e) {
 					// TODO Auto-generated catch block
 					System.out.println("client.wait interrupted");
 				}
+				synchronized (client) {
+					state=client.state;
+				}
+			}
 		}
 		System.out.println("State: "+state);
-			
+		long lastSendTime = System.currentTimeMillis();
+		
+		for (String valueId : values.getValueIds()) {
+			Value value = values.getValue(valueId);
+			if (value!=null)
+				value.resetPublished();
+		}
+		long lastUpdateDone = 0;
+		
 		while (state==State.CONNECTED) {
-			synchronized (client) {
-				state = client.state;
+			synchronized (sync) {
+				boolean uptodate = false;
+				synchronized (client) {
+					state = client.state;
+					uptodate = (client.responseCount==client.requestCount);					
+				}
 				if (state==State.CONNECTED) {
+					// check values
+					long lastUpdate = values.getLastUpdate();
+					//System.out.println("State="+state+", response="+client.responseCount+", request="+client.requestCount+", uptodate="+uptodate+", lastUpdate="+lastUpdate+", lastUpdateDone="+lastUpdateDone);
+					if (uptodate && lastUpdate!=lastUpdateDone) {	
+						lastUpdateDone = lastUpdate;
+						System.out.println("Update to "+lastUpdate);
+						for (String valueId : values.getValueIds()) {
+							Value value = values.getValue(valueId);
+							if (value!=null) {
+								if (!value.isPublished()) {
+									String room = value.getName();
+									client.createRoom(room);
+									String svalue = value.publish();									
+									client.setRoomAttr(room, VALUE_ATTR, svalue);
+									double dvalue = value.takeValueChange();
+									client.setRoomAttr(room, DELTA_VALUE_ATTR, Double.toString(dvalue));
+									lastSendTime = System.currentTimeMillis();
+								}
+								else if (value.isUpdated()) {
+									String room = value.getName();
+									String svalue = value.publish();
+									client.setRoomAttr(room, VALUE_ATTR, svalue);
+									double dvalue = value.takeValueChange();
+									client.setRoomAttr(room, DELTA_VALUE_ATTR, Double.toString(dvalue));
+									lastSendTime = System.currentTimeMillis();
+								}
+							}
+						}
+					}
 					try {
-						client.wait(10000);
+						long now = System.currentTimeMillis();
+						long elapsed = now-lastSendTime;
+						if (elapsed<10000) {
+							sync.wait(100);
+						}
+						else {
+							client.syncTime();
+							lastSendTime = System.currentTimeMillis();
+						}
 					} catch (InterruptedException e) {
 						// TODO Auto-generated catch block
 						System.out.println("client.wait interrupted (2)");
 					}
 				}
-			}
-			if (state==State.CONNECTED) {
-				client.syncTime();
 			}
 		}
 	}

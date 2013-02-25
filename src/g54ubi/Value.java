@@ -56,4 +56,42 @@ class Value {
 			this.notifyAll();
 		}
 	}
+	
+	synchronized void resetPublished() {
+		this.published = false;
+		this.publishedTime = 0;
+		this.publishedValue = null;
+	}
+	
+	synchronized boolean isPublished() {
+		return published;
+	}
+	
+	synchronized boolean isUpdated() {
+		if (ivalueChange!=0 || (publishedValue!=value && (publishedValue==null || !publishedValue.equals(value))))
+			return true;
+		return false;
+	}
+	
+	synchronized double takeValueChange() {
+		double valueChange = ivalueChange*scale;
+		ivalueChange = 0;
+		return valueChange;
+	}
+	
+	synchronized String publish() {
+		publishedValue = value;
+		if (publishedValue==null)
+			publishedValue = "";
+		publishedTime = System.currentTimeMillis();
+		published = true;
+		return publishedValue;
+	}
+	
+	String getName() {
+		return name;
+	}
+	String getValue() {
+		return value;
+	}
 }

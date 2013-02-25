@@ -50,12 +50,12 @@ public class PhidgetClient {
 										rfid.setLEDOn(true);
 										// There doesn't seem to be a specific minimum to have the antenna on
 										// but 20ms seems very unreliable; 50ms a bit unreliable; 100ms fairly reliable.
-										wait(100);
+										wait(50);
 										count++;
-										String tag = rfid.getLastTag();
-										if (!rfid.getTagStatus())
-											tag = null;
-										System.out.println("Reader "+rfid.getSerialNumber()+" tag "+tag);
+										//String tag = rfid.getLastTag();
+										//if (!rfid.getTagStatus())
+										//	tag = null;
+										//System.out.println("Reader "+rfid.getSerialNumber()+" tag "+tag);
 										rfid.setAntennaOn(false);
 										rfid.setLEDOn(false);
 
@@ -94,6 +94,10 @@ public class PhidgetClient {
 		private long changedTime;
 		private double scale = 1.0;
 		private double offset;
+		private String publishedValue;
+		private int ivalueChange;
+		private boolean published;
+		private long publishedTime;
 		
 		Value(String id, String name, String initialValue) {
 			this.id = id;
@@ -114,25 +118,24 @@ public class PhidgetClient {
 		}
 
 		synchronized void setValue(String value) {
-			if (value!=null) {
-				if (!value.equals(this.value)) {
-					this.value = value;
-					this.changed = true;
-					this.changedTime = System.currentTimeMillis();
-					System.out.println("Value "+name+" = "+value);
-					this.notifyAll();
-				}
+			if (value!=this.value && (value==null || !value.equals(this.value))) {
+				this.value = value;
+				this.changed = true;
+				this.changedTime = System.currentTimeMillis();
+				System.out.println("Value "+id+" ("+name+") = "+value);
+				this.notifyAll();
 			}
 		}
 
 		synchronized public void setValue(int value) {
 			if (value!=this.ivalue) {
 				ivalue = value;
+				ivalueChange += Math.abs(value-this.ivalue);
 				dvalue = value*scale+offset;
 				this.value = Double.toString(dvalue);
 				changed = true;
 				changedTime = System.currentTimeMillis();
-				System.out.println("Value "+name+" = "+this.value);
+				System.out.println("Value "+id+" ("+name+") = "+this.value);
 				this.notifyAll();
 			}
 		}
@@ -157,6 +160,7 @@ public class PhidgetClient {
 	protected static final String SENSOR_INFIX = ".sensor.";
 	protected static final String SCALE_SUFFIX = ".scale";
 	protected static final String OFFSET_SUFFIX = ".offset";
+	private static final String RFID_PREFIX = "rfid.";
 	
 	/** get config helper */
 	static String getProperty(Properties props, String key, String defaultValue) {
@@ -228,7 +232,8 @@ public class PhidgetClient {
 	}
 	
 	static void handleAttachInterfaceKit(String serverID, final int id) throws PhidgetException {
-		// TODO Auto-generated method stub
+		if (phidgets.containsKey(id)) 
+			return;
 		final InterfaceKitPhidget ifkit = new InterfaceKitPhidget();
 		if (serverID!=null)											
 			ifkit.open(id, serverID);
@@ -237,6 +242,7 @@ public class PhidgetClient {
 		synchronized(phidgets) {
 			phidgets.put(id, ifkit);
 		}
+
 		// find in properties...
 		final String prefix = findPropertiesKey(IFKIT_PREFIX, String.valueOf(id));
 		final String ifkitname = getProperty(props, prefix+NAME_SUFFIX, "undefined");
@@ -309,6 +315,80 @@ public class PhidgetClient {
 		
 	}
 
+	protected static void handleAttachRFID(String serverID, final int id) throws PhidgetException {
+		if (phidgets.containsKey(id)) 
+			return;
+		final RFIDPhidget rfid = new RFIDPhidget();
+		if (serverID!=null)
+			rfid.open(id, serverID);
+		else
+			rfid.open(id);
+
+		// find in properties...
+		final String prefix = findPropertiesKey(RFID_PREFIX, String.valueOf(id));
+		final String name = getProperty(props, prefix+NAME_SUFFIX, "undefined");
+
+		System.out.println("Added RFID "+id+" ("+name+")");
+
+		String valueid = RFID_PREFIX+id;
+		Value val = values.get(valueid);
+		if (val==null){
+			val = new Value(valueid, name, null);
+			insertValue(val);
+		}		
+		final Value value = values.get(valueid);
+		
+		// delay add phidget to attached
+		if (true) {
+			// use polling instead
+			rfid.addTagGainListener(new TagGainListener() {
+
+				@Override
+				public void tagGained(TagGainEvent tge) {
+					//System.out.println("Gained tag "+tge.getValue()+" on "+id);
+					if (value!=null)
+						value.setValue(tge.getValue());
+				}
+			});
+			rfid.addTagLossListener(new TagLossListener() {
+
+				@Override
+				public void tagLost(TagLossEvent tge) {
+					//System.out.println("Lost tag "+tge.getValue()+" on "+id);
+					if (value!=null)
+						value.setValue(null);
+
+				}
+			});
+		}
+		rfid.addAttachListener(new AttachListener() {
+			
+			@Override
+			public void attached(AttachEvent ae) {
+				// TODO Auto-generated method stub
+				System.out.println("RFID "+id+" attached");
+				synchronized(phidgets) {
+					phidgets.put(id, rfid);
+				}
+				try {
+					rfid.setAntennaOn(false);
+					rfid.setLEDOn(false);
+				} catch (PhidgetException e) {
+					e.printStackTrace();
+				}
+			}
+		});
+		rfid.addDetachListener(new DetachListener() {
+			
+			@Override
+			public void detached(DetachEvent arg0) {
+				// TODO Auto-generated method stub
+				System.out.println("RFID "+id+" detached");
+			}
+		});
+
+	}
+
 	static Properties props = new Properties();
 	static Map<Integer,Phidget> phidgets = new HashMap<Integer,Phidget>();
 	/**
@@ -339,59 +419,7 @@ public class PhidgetClient {
 						final int id = phid.getSerialNumber();
 						if (!phidgets.containsKey(ae.getSource().getSerialNumber())) {
 							if (phid.getDeviceClass()==Phidget.PHIDCLASS_RFID) {
-								System.out.println("Added RFID "+id);
-								final RFIDPhidget rfid = new RFIDPhidget();
-								if (serverID!=null)
-									rfid.open(id, serverID);
-								else
-									rfid.open(id);
-								// delay add to attached
-								if (false) {
-									// use polling instead
-									rfid.addTagGainListener(new TagGainListener() {
-
-										@Override
-										public void tagGained(TagGainEvent tge) {
-											// TODO Auto-generated method stub
-											System.out.println("Read tag "+tge.getValue()+" on "+id);
-										}
-									});
-									rfid.addTagLossListener(new TagLossListener() {
-
-										@Override
-										public void tagLost(TagLossEvent tge) {
-											// TODO Auto-generated method stub
-											System.out.println("Lost tag "+tge.getValue()+" on "+id);
-
-										}
-									});
-								}
-								rfid.addAttachListener(new AttachListener() {
-									
-									@Override
-									public void attached(AttachEvent ae) {
-										// TODO Auto-generated method stub
-										System.out.println("RFID "+id+" attached");
-										synchronized(phidgets) {
-											phidgets.put(id, rfid);
-										}
-										try {
-											rfid.setAntennaOn(false);
-											rfid.setLEDOn(false);
-										} catch (PhidgetException e) {
-											// TODO Auto-generated catch block
-											e.printStackTrace();
-										}
-									}
-								});
-								rfid.addDetachListener(new DetachListener() {
-									
-									@Override
-									public void detached(DetachEvent arg0) {
-										// TODO Auto-generated method stub
-										System.out.println("RFID "+id+" detached");
-									}
-								});
+								handleAttachRFID(serverID, id);
 							}
 							else if (phid.getDeviceClass()==Phidget.PHIDCLASS_INTERFACEKIT) {
 								handleAttachInterfaceKit(serverID, id);
@@ -442,5 +470,4 @@ public class PhidgetClient {
 			e.printStackTrace(System.err);
 		}
 	}
-
 }

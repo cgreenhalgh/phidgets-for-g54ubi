@@ -146,6 +146,14 @@ public class UnionClient {
 		String roomID = evt.getUPCMessage().getArgText(0);
 		String status = evt.getUPCMessage().getArgText(1);
 	    System.out.println("CLIENT_ROOM_RESULT: room=" + roomID + " status=" + status);
+	    joinRoom(roomID);
+	}
+	public void joinRoom(String roomID) {
+	    System.out.println("Send JOIN_ROOM...");
+	    // u3 JOIN_ROOM
+	    // roomID, password
+	    mar.getMessageManager().sendUPC("u4", roomID, "");
+	    // returns u72
 	}
 	public void setRoomAttr(String roomID, String name, String value) {
 		System.out.println("Send SET_ROOM_ATTR "+roomID+" "+name+" = "+value);

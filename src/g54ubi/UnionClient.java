@@ -29,6 +29,9 @@ public class UnionClient {
 	private static final int DEFAULT_SERVERPORT = 80;
 
 	private static final String UNION_ROOMPREFIX = "union.roomprefix";
+
+	private static final String HTTP_PROXY_HOST = "http.proxyHost";
+	private static final String HTTP_PROXY_PORT = "http.proxyPort";
 	
 	private Mariner mar;
 	private State state;
@@ -220,6 +223,14 @@ public class UnionClient {
 			System.err.println("Error reading configuration: "+e);
 			System.exit(-1);
 		}
+		
+		String httpProxy = configuration2.getProperty(HTTP_PROXY_HOST, null);
+		if (httpProxy!=null)
+			System.setProperty(HTTP_PROXY_HOST, httpProxy);
+		String httpPort = configuration2.getProperty(HTTP_PROXY_PORT, null);
+		if (httpPort!=null)
+			System.setProperty(HTTP_PROXY_PORT, httpPort);
+		
 		final Configuration configuration = configuration2;
 		new Thread() {
 			public void run() {

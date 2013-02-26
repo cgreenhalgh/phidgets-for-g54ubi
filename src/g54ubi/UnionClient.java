@@ -19,6 +19,16 @@ public class UnionClient {
 	private static final String DELTA_VALUE_ATTR = "delta";
 
 	private static final long WAIT_CONNECT_TIME = 30000;
+
+	private static final String UNION_SERVERNAME = "union.servername";
+
+	private static final String DEFAULT_SERVERNAME = "tryunion.com";
+
+	private static final String UNION_SERVERPORT = "union.serverport";
+
+	private static final int DEFAULT_SERVERPORT = 80;
+
+	private static final String UNION_ROOMPREFIX = "union.roomprefix";
 	
 	private Mariner mar;
 	private State state;
@@ -29,7 +39,9 @@ public class UnionClient {
 	private int responseCount = 0;
 	private Object sync;
 	
-	UnionClient(Object sync) {
+	UnionClient(Object sync, String servername, int serverport) {
+		host = servername;
+		port = serverport;
 		this.sync = sync;
 	}
 	
@@ -192,14 +204,23 @@ public class UnionClient {
 	public static void main(String[] args) {
 		Object sync = new Object();
 		final ValueSet values = new ValueSet(sync);
-		
+		Configuration configuration2 = null;
+		try {
+			configuration2 = new Configuration();
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			System.err.println("Error reading configuration: "+e);
+			System.exit(-1);
+		}
+		final Configuration configuration = configuration2;
 		new Thread() {
 			public void run() {
-				PhidgetClient.run(new String[0], values);
+				PhidgetClient.run(new String[0], values, configuration);
 			}
 		}.start();
 
-		UnionClient client = new UnionClient(sync);
+		final String roomPrefix = configuration.getProperty(UNION_ROOMPREFIX, "g54ubi.");
+		UnionClient client = new UnionClient(sync, configuration.getProperty(UNION_SERVERNAME, DEFAULT_SERVERNAME), configuration.getProperty(UNION_SERVERPORT, DEFAULT_SERVERPORT));
 		while (true) {
 			try {
 				long startTime = System.currentTimeMillis();
@@ -254,7 +275,7 @@ public class UnionClient {
 									Value value = values.getValue(valueId);
 									if (value!=null) {
 										if (!value.isPublished()) {
-											String room = value.getName();
+											String room = roomPrefix+value.getName();
 											client.createRoom(room);
 											String svalue = value.publish();									
 											client.setRoomAttr(room, VALUE_ATTR, svalue);
@@ -263,7 +284,7 @@ public class UnionClient {
 											lastSendTime = System.currentTimeMillis();
 										}
 										else if (value.isUpdated()) {
-											String room = value.getName();
+											String room = roomPrefix+value.getName();
 											String svalue = value.publish();
 											client.setRoomAttr(room, VALUE_ATTR, svalue);
 											double dvalue = value.takeValueChange();
@@ -276,12 +297,17 @@ public class UnionClient {
 							try {
 								long now = System.currentTimeMillis();
 								long elapsed = now-lastSendTime;
-								if (elapsed<10000) {
-									sync.wait(100);
-								}
-								else {
+								if (elapsed>10000 && uptodate) {
+									// don't sync unless uptodate aswell, i.e. max one outstanding sync request
 									client.syncTime();
 									lastSendTime = System.currentTimeMillis();
+								}
+								else if (elapsed>WAIT_CONNECT_TIME) {
+									System.out.println("Connection timed out");
+									client.close();
+								}
+								else {
+									sync.wait(100);
 								}
 							} catch (InterruptedException e) {
 								System.out.println("client.wait interrupted (2)");

@@ -4,6 +4,8 @@
 package g54ubi;
 
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -22,6 +24,8 @@ import com.phidgets.event.*;
  *
  */
 public class PhidgetClient {
+	
+	private static boolean pollRfid = true;
 
 	static class RFIDPollThread extends Thread {
 		private boolean done = false;
@@ -52,10 +56,28 @@ public class PhidgetClient {
 										// but 20ms seems very unreliable; 50ms a bit unreliable; 100ms fairly reliable.
 										wait(100);
 										count++;
-										//String tag = rfid.getLastTag();
-										//if (!rfid.getTagStatus())
-										//	tag = null;
-										//System.out.println("Reader "+rfid.getSerialNumber()+" tag "+tag);
+										if (pollRfid) {
+											String tag = rfid.getLastTag();
+											if (!rfid.getTagStatus()) {
+												tag = null;
+											}
+											if (tag!=null) {
+												// check valid?
+												for (int i=0; i<tag.length(); i++) {
+													char c = tag.charAt(i);
+													if (!Character.isLetterOrDigit(c) || ((int)c)>0x7f) {
+														System.err.println("Ignore tag with non-ascii value: "+tag);
+														tag = null;
+														break;
+													}
+												}
+											}
+											if (tag!=null)
+												System.out.println("Reader "+rfid.getSerialNumber()+" tag "+tag);
+
+											String valueid = RFID_PREFIX+rfid.getSerialNumber();
+											values.setValue(valueid, tag);
+										}
 										rfid.setAntennaOn(false);
 										rfid.setLEDOn(false);
 
@@ -85,84 +107,12 @@ public class PhidgetClient {
 	
 	static ValueSet values;
 	
-	private static final String PROPERTIES_FILE = "phidget.properties";
 	private static final String PHIDGET_SERVER = "phidget.server";
-	private static final String ID_SUFFIX = ".id";
-	private static final String NAME_SUFFIX = ".name";
 	private static final String IFKIT_PREFIX = "ifkit.";
 	protected static final String SENSOR_INFIX = ".sensor.";
 	protected static final String SCALE_SUFFIX = ".scale";
 	protected static final String OFFSET_SUFFIX = ".offset";
 	private static final String RFID_PREFIX = "rfid.";
-	
-	/** get config helper */
-	static String getProperty(Properties props, String key, String defaultValue) {
-		String value = props.getProperty(key);
-		if (value==null) {
-			System.out.println("Property "+key+" = "+defaultValue+ " (default)");
-			return defaultValue;
-		}
-		System.out.println("Property "+key+" = "+value);
-		return value;		
-	}
-	/** get config helper */
-	static int getProperty(Properties props, String key, int defaultValue) {
-		String svalue = props.getProperty(key);
-		if (svalue==null) {
-			System.out.println("Property "+key+" = "+defaultValue+ " (default)");
-			return defaultValue;
-		}
-		try {
-			int value = Integer.parseInt(svalue);
-			System.out.println("Property "+key+" = "+value);
-			return value;				
-		}
-		catch (NumberFormatException nfe) {
-			System.out.println("Property "+key+" = "+defaultValue+" (Invalid non-int value: "+svalue+")");
-			return defaultValue;
-		}
-	}
-	/** get config helper */
-	static double getProperty(Properties props, String key, double defaultValue) {
-		String svalue = props.getProperty(key);
-		if (svalue==null) {
-			System.out.println("Property "+key+" = "+defaultValue+ " (default)");
-			return defaultValue;
-		}
-		try {
-			double value = Double.parseDouble(svalue);
-			System.out.println("Property "+key+" = "+value);
-			return value;				
-		}
-		catch (NumberFormatException nfe) {
-			System.out.println("Property "+key+" = "+defaultValue+" (Invalid non-double value: "+svalue+")");
-			return defaultValue;
-		}
-	}
-	
-	/** get config helper - look for <prefix><i>.id = <id> with i=0.. */
-	static String findPropertiesKey(String prefix, String id) {
-		int defaulti = -1;
-		for(int i=0; true; i++) {
-			String idkey = prefix+i+ID_SUFFIX;
-			String idvalue = props.getProperty(idkey);
-			String namekey = prefix+i+NAME_SUFFIX;
-			String namevalue = props.getProperty(namekey);
-			if (idvalue==null && namevalue!=null) {
-				defaulti = i;
-			}
-			else if (idvalue!=null && idvalue.equals(id))
-				return prefix+i;
-			else if (namevalue==null)
-				break;
-		}
-		if (defaulti>=0) {
-			System.out.println("Note: using default configuration "+defaulti+" for ID "+id);
-			return prefix+defaulti;
-		}
-		System.out.println("Warning: no configuration found for "+prefix+" for ID "+id);
-		return prefix+0;
-	}
 	
 	static void handleAttachInterfaceKit(String serverID, final int id) throws PhidgetException {
 		if (phidgets.containsKey(id)) 
@@ -177,8 +127,8 @@ public class PhidgetClient {
 		}
 
 		// find in properties...
-		final String prefix = findPropertiesKey(IFKIT_PREFIX, String.valueOf(id));
-		final String ifkitname = getProperty(props, prefix+NAME_SUFFIX, "undefined");
+		final String prefix = configuration.findPropertiesKey(IFKIT_PREFIX, String.valueOf(id));
+		final String ifkitname = configuration.getProperty(prefix+Configuration.NAME_SUFFIX, "undefined");
 
 		System.out.println("Added InterfaceKit "+id+ "("+ifkitname+")");
 		
@@ -211,10 +161,10 @@ public class PhidgetClient {
 						System.out.println("Sensor initial "+i+" = "+ifkit.getSensorValue(i));
 						
 						String sensorprefix = prefix+SENSOR_INFIX+i;
-						String sensorname = getProperty(props, sensorprefix+NAME_SUFFIX, "undefined"+i);
+						String sensorname = configuration.getProperty(sensorprefix+Configuration.NAME_SUFFIX, "undefined"+i);
 						// TODO name prefix
-						double scale = getProperty(props, sensorprefix+SCALE_SUFFIX, 1.0);
-						double offset = getProperty(props, sensorprefix+OFFSET_SUFFIX, 0.0);
+						double scale = configuration.getProperty(sensorprefix+SCALE_SUFFIX, 1.0);
+						double offset = configuration.getProperty(sensorprefix+OFFSET_SUFFIX, 0.0);
 						Value val = values.getValue(sensorid);
 						if (val==null){
 							val = new Value(sensorid, sensorname, scale, offset, value);
@@ -252,8 +202,8 @@ public class PhidgetClient {
 			rfid.open(id);
 
 		// find in properties...
-		final String prefix = findPropertiesKey(RFID_PREFIX, String.valueOf(id));
-		final String name = getProperty(props, prefix+NAME_SUFFIX, "undefined");
+		final String prefix = configuration.findPropertiesKey(RFID_PREFIX, String.valueOf(id));
+		final String name = configuration.getProperty(prefix+Configuration.NAME_SUFFIX, "undefined");
 
 		System.out.println("Added RFID "+id+" ("+name+")");
 
@@ -264,7 +214,7 @@ public class PhidgetClient {
 			values.insertValue(val);
 		}		
 		// delay add phidget to attached
-		if (true) {
+		if (!pollRfid) {
 			// use polling instead
 			rfid.addTagGainListener(new TagGainListener() {
 
@@ -312,23 +262,28 @@ public class PhidgetClient {
 
 	}
 
-	static Properties props = new Properties();
+	static Configuration configuration;
 	static Map<Integer,Phidget> phidgets = new HashMap<Integer,Phidget>();
 	/**
 	 * @param args
 	 */
 	public static void main(String[] args) {
-		run(args, new ValueSet(new Object()));
+		Configuration configuration = null;
+		try {
+			configuration = new Configuration();
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			System.err.println("Error reading configuration: "+e);
+			System.exit(-1);
+		}
+		run(args, new ValueSet(new Object()), configuration);
 	}
-	public static void run(String [] args, ValueSet values2) {
+	public static void run(String [] args, ValueSet values2, Configuration configuration2) {
 		values = values2;
 		try {
+			configuration = configuration2;
 			
-			System.out.println("Reading properties from "+PROPERTIES_FILE);
-			//Properties props = new Properties();
-			props.load(new FileInputStream(PROPERTIES_FILE));
-			
-			String serverProp = getProperty(props, PHIDGET_SERVER, null);
+			String serverProp = configuration.getProperty(PHIDGET_SERVER, null);
 			final String serverID = (args.length>0 ? args[0] : serverProp); //"mrlphidgetsbc1";
 			System.out.println("using phidget.server "+serverID);
 			

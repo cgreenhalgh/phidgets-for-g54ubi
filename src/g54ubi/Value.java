@@ -34,17 +34,20 @@ class Value {
 		setValue(value);
 	}
 
-	synchronized void setValue(String value) {
+	synchronized boolean setValue(String value) {
 		if (value!=this.value && (value==null || !value.equals(this.value))) {
 			this.value = value;
 			this.changed = true;
 			this.changedTime = System.currentTimeMillis();
+			ivalueChange ++;
 			System.out.println("Value "+id+" ("+name+") = "+value);
 			this.notifyAll();
+			return true;
 		}
+		return false;
 	}
 
-	synchronized public void setValue(int value) {
+	synchronized public boolean setValue(int value) {
 		if (value!=this.ivalue) {
 			ivalue = value;
 			ivalueChange += Math.abs(value-this.ivalue);
@@ -54,7 +57,9 @@ class Value {
 			changedTime = System.currentTimeMillis();
 			System.out.println("Value "+id+" ("+name+") = "+this.value);
 			this.notifyAll();
+			return true;
 		}
+		return false;
 	}
 	
 	synchronized void resetPublished() {
@@ -68,7 +73,10 @@ class Value {
 	}
 	
 	synchronized boolean isUpdated() {
-		if (ivalueChange!=0 || (publishedValue!=value && (publishedValue==null || !publishedValue.equals(value))))
+		String pvalue = value;
+		if (pvalue==null)
+			pvalue = "";
+		if (ivalueChange!=0 || !pvalue.equals(publishedValue))
 			return true;
 		return false;
 	}

@@ -38,28 +38,34 @@ public class ValueSet {
 	
 	void setValue(String id, String value) {
 		synchronized (sync) {
+			boolean changed = false;
 			synchronized (this) {
 				Value v = values.get(id);
 				if (v!=null)
-					v.setValue(value);
+					changed = v.setValue(value);
 				else
 					System.err.println("setValue for unknown Value "+id);
-				lastUpdate++;
+				if (changed)
+					lastUpdate++;
 			}
-			sync.notifyAll();
+			if (changed)
+				sync.notifyAll();
 		}
 	}
 	void setValue(String id, int value) {
 		synchronized (sync) {
+			boolean changed = false;
 			synchronized (this) {
 				Value v = values.get(id);
 				if (v!=null)
-					v.setValue(value);
+					changed = v.setValue(value);
 				else
 					System.err.println("setValue for unknown Value "+id);
-				lastUpdate++;
+				if (changed)
+					lastUpdate++;
 			}
-			sync.notifyAll();
+			if (changed)
+				sync.notifyAll();
 		}
 	}
 	

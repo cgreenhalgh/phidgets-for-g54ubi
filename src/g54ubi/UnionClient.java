@@ -106,7 +106,8 @@ public class UnionClient {
 			mar.close();
 		}
 		catch(Exception e) {
-			System.err.println("Error closing Mariner: "+e);
+			System.out.println("Error closing Mariner: "+e);
+			e.printStackTrace(System.out);
 		}
 	}
 	public void onConnectionReady(MarinerEvent evt) {
@@ -120,7 +121,7 @@ public class UnionClient {
 	    			sync.notifyAll();
 	    		}
 	    		else {
-	    			System.err.println("Received onConnectionReady in invalid state "+state);
+	    			System.out.println("Received onConnectionReady in invalid state "+state);
 	    		}
 	    	}
 	    }
@@ -220,7 +221,7 @@ public class UnionClient {
 			configuration2 = new Configuration();
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
-			System.err.println("Error reading configuration: "+e);
+			System.out.println("Error reading configuration: "+e);
 			System.exit(-1);
 		}
 		
@@ -255,8 +256,10 @@ public class UnionClient {
 							long elapsed = now-startTime;
 							if (elapsed<WAIT_CONNECT_TIME)
 								sync.wait(WAIT_CONNECT_TIME-elapsed);
-							else
+							else {
+								System.out.println("Connect took too long - giving up");
 								client.close();
+							}
 						} catch (InterruptedException e) {
 							// TODO Auto-generated catch block
 							System.out.println("client.wait interrupted");
@@ -336,7 +339,7 @@ public class UnionClient {
 				}
 			}
 			catch(Exception e) {
-				System.err.println("Error: "+e);
+				System.out.println("Error: "+e);
 				e.printStackTrace(System.err);
 			}
 			System.out.println("Union client failed");

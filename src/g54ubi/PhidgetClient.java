@@ -6,7 +6,11 @@ package g54ubi;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
 import java.util.Collection;
+import java.util.Date;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -113,6 +117,8 @@ public class PhidgetClient {
 	protected static final String SCALE_SUFFIX = ".scale";
 	protected static final String OFFSET_SUFFIX = ".offset";
 	private static final String RFID_PREFIX = "rfid.";
+	protected static final String PERIOD_SUFFIX = ".period";
+	protected static final String TRIGGER_SUFFIX = ".trigger";
 	
 	static void handleAttachInterfaceKit(String serverID, final int id) throws PhidgetException {
 		if (phidgets.containsKey(id)) 
@@ -160,7 +166,14 @@ public class PhidgetClient {
 						int value = ifkit.getSensorValue(i);
 						System.out.println("Sensor initial "+i+" = "+ifkit.getSensorValue(i));
 						
+						
 						String sensorprefix = prefix+SENSOR_INFIX+i;
+						// configure rate/sensitivity to change
+						int period = (int)(configuration.getProperty(sensorprefix+PERIOD_SUFFIX, 1.0)*1000);
+						ifkit.setDataRate(i, period);
+						int trigger = configuration.getProperty(sensorprefix+TRIGGER_SUFFIX, 10);
+						ifkit.setSensorChangeTrigger(i, trigger);
+						
 						String sensorname = configuration.getProperty(sensorprefix+Configuration.NAME_SUFFIX, "undefined"+i);
 						// TODO name prefix
 						double scale = configuration.getProperty(sensorprefix+SCALE_SUFFIX, 1.0);
@@ -278,6 +291,69 @@ public class PhidgetClient {
 		}
 		run(args, new ValueSet(new Object()), configuration);
 	}
+	
+	static class TimerThread extends Thread {
+		private static final String TIMER_NAME = "timer.name";
+		private static final String TIMER_PERIOD = "timer.period";
+		Value timer;
+		long periodms;
+		
+		TimerThread() {
+			timer = new Value("timer", configuration.getProperty(TIMER_NAME, "timer"), getValue());
+			values.insertValue(timer);
+
+			double period = configuration.getProperty(TIMER_PERIOD, 10.0);
+			if (period<1)
+				period = 1;			
+			periodms = (long)(period*1000);
+			setDaemon(true);
+		}
+		private String getValue() {
+			return getIPAddress()+" "+new Date().toString();
+		}
+		private String getIPAddress() {
+			StringBuilder sb = new StringBuilder();
+			try {
+				InetAddress ip = InetAddress.getLocalHost();
+				sb.append(ip.getHostAddress());
+				sb.append("; ");
+			}
+			catch (Exception e) {
+				System.out.println("Error getting local host: "+e);
+				sb.append("unknown; ");
+			}
+			try {
+				Enumeration<NetworkInterface> ifs = NetworkInterface.getNetworkInterfaces();
+				while (ifs.hasMoreElements()) {
+					NetworkInterface ni = ifs.nextElement();
+					Enumeration<InetAddress> ips = ni.getInetAddresses();
+					while(ips.hasMoreElements()) {
+						InetAddress ip = ips.nextElement();
+						
+						sb.append(ip.getHostAddress());
+						sb.append("; ");
+					}
+				}
+			}
+			catch (Exception e) {
+				System.out.println("Error getting local host: "+e);
+				sb.append("unknown; ");
+			}
+			return sb.toString();
+		}
+		public void run() {
+			try {
+				while (true) {
+					sleep(periodms);
+					timer.setValue(getValue());
+				}
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+	}
+	
 	public static void run(String [] args, ValueSet values2, Configuration configuration2) {
 		values = values2;
 		try {
@@ -290,6 +366,7 @@ public class PhidgetClient {
 			Manager man;
 			System.out.println(Phidget.getLibraryVersion());
 
+			new TimerThread().start();
 			
 			man = new Manager();
 			man.addAttachListener(new AttachListener()

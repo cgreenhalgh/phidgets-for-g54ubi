@@ -297,9 +297,9 @@ public class PhidgetClient {
 		private static final String TIMER_PERIOD = "timer.period";
 		Value timer;
 		long periodms;
-		
+		private static String ID = "timer";
 		TimerThread() {
-			timer = new Value("timer", configuration.getProperty(TIMER_NAME, "timer"), getValue());
+			timer = new Value(ID, configuration.getProperty(TIMER_NAME, "timer"), getValue());
 			values.insertValue(timer);
 
 			double period = configuration.getProperty(TIMER_PERIOD, 10.0);
@@ -345,7 +345,7 @@ public class PhidgetClient {
 			try {
 				while (true) {
 					sleep(periodms);
-					timer.setValue(getValue());
+					values.setValue(ID, getValue());
 				}
 			} catch (InterruptedException e) {
 				// TODO Auto-generated catch block

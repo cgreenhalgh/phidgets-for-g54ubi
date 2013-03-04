@@ -413,9 +413,13 @@ public class PhidgetClient {
 			}
 			RFIDPollThread poll = new RFIDPollThread(phidgets);
 			poll.start();
-			logger.info("Press any key to exit...");
-			System.in.read();
-
+			
+			while (true) {
+				Thread.sleep(100000);
+			}
+			//logger.info("Press any key to exit...");
+			//System.in.read();
+/*
 			poll.end();
 			poll.interrupt();
 			Thread.sleep(100);
@@ -425,6 +429,7 @@ public class PhidgetClient {
 			Thread.sleep(1000);
 			logger.info(" ok");
 			Thread.sleep(1000);
+*/
 		} catch (Exception e) {
 			logger.error("Error: "+e, e);
 		}

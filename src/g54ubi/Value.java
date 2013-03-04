@@ -1,7 +1,11 @@
 package g54ubi;
 
+import org.apache.log4j.Logger;
+
 /** a value to be published, including sensor value scaling logic */
 class Value {
+	static Logger logger = Logger.getLogger(Value.class);
+
 	String id;
 	private String name;
 	private String value;
@@ -40,7 +44,7 @@ class Value {
 			this.changed = true;
 			this.changedTime = System.currentTimeMillis();
 			ivalueChange ++;
-			System.out.println("Value "+id+" ("+name+") = "+value);
+			logger.debug("Value "+id+" ("+name+") = "+value);
 			this.notifyAll();
 			return true;
 		}
@@ -55,7 +59,7 @@ class Value {
 			this.value = Double.toString(dvalue);
 			changed = true;
 			changedTime = System.currentTimeMillis();
-			System.out.println("Value "+id+" ("+name+") = "+this.value);
+			logger.debug("Value "+id+" ("+name+") = "+this.value);
 			this.notifyAll();
 			return true;
 		}

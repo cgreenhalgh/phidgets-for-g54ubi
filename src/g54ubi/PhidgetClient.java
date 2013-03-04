@@ -18,6 +18,8 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.Vector;
 
+import org.apache.log4j.Logger;
+
 import com.phidgets.*;
 import com.phidgets.event.*;
 
@@ -28,6 +30,8 @@ import com.phidgets.event.*;
  *
  */
 public class PhidgetClient {
+	
+	static Logger logger = Logger.getLogger(PhidgetClient.class);
 	
 	private static boolean pollRfid = true;
 
@@ -70,14 +74,14 @@ public class PhidgetClient {
 												for (int i=0; i<tag.length(); i++) {
 													char c = tag.charAt(i);
 													if (!Character.isLetterOrDigit(c) || ((int)c)>0x7f) {
-														System.err.println("Ignore tag with non-ascii value: "+tag);
+														logger.error("Ignore tag with non-ascii value: "+tag);
 														tag = null;
 														break;
 													}
 												}
 											}
 											if (tag!=null)
-												System.out.println("Reader "+rfid.getSerialNumber()+" tag "+tag);
+												logger.debug("Reader "+rfid.getSerialNumber()+" tag "+tag);
 
 											String valueid = RFID_PREFIX+rfid.getSerialNumber();
 											values.setValue(valueid, tag);
@@ -88,8 +92,7 @@ public class PhidgetClient {
 									}
 								} catch (PhidgetException e) {
 									// TODO Auto-generated catch block
-									System.out.println("Error checking rfid: "+e);
-									e.printStackTrace();
+									logger.error("Error checking rfid: "+e, e);
 								}
 							}
 						}
@@ -99,7 +102,7 @@ public class PhidgetClient {
 				}
 			}
 			catch (InterruptedException ie) {
-				System.out.println("poll interrupted");
+				logger.error("poll interrupted");
 			}
 		}
 
@@ -136,14 +139,14 @@ public class PhidgetClient {
 		final String prefix = configuration.findPropertiesKey(IFKIT_PREFIX, String.valueOf(id));
 		final String ifkitname = configuration.getProperty(prefix+Configuration.NAME_SUFFIX, "undefined");
 
-		System.out.println("Added InterfaceKit "+id+ "("+ifkitname+")");
+		logger.info("Added InterfaceKit "+id+ "("+ifkitname+")");
 		
 		ifkit.addSensorChangeListener(new SensorChangeListener() {
 			
 			@Override
 			public void sensorChanged(SensorChangeEvent sce) {
 				// TODO Auto-generated method stub
-				System.out.println("Sensor change "+sce.getIndex()+" = "+sce.getValue());
+				logger.debug("Sensor change "+sce.getIndex()+" = "+sce.getValue());
 				String sensorid = IFKIT_PREFIX+id+SENSOR_INFIX+sce.getIndex();
 				values.setValue(sensorid, sce.getValue());
 			}
@@ -153,18 +156,18 @@ public class PhidgetClient {
 			@Override
 			public void attached(AttachEvent ae) {
 				// TODO Auto-generated method stub
-				System.out.println("interfacekit "+id+" attached");
+				logger.info("interfacekit "+id+" attached");
 				int sensors;
 				try {
 					sensors = ifkit.getSensorCount();
-					System.out.println("interfacekit reports "+sensors+" sensors");
+					logger.info("interfacekit reports "+sensors+" sensors");
 					if (sensors>8)
 						sensors = 8;
 					for (int i=0; i<sensors; i++) {
 						String sensorid = IFKIT_PREFIX+id+SENSOR_INFIX+i;
 						
 						int value = ifkit.getSensorValue(i);
-						System.out.println("Sensor initial "+i+" = "+ifkit.getSensorValue(i));
+						logger.debug("Sensor initial "+i+" = "+ifkit.getSensorValue(i));
 						
 						
 						String sensorprefix = prefix+SENSOR_INFIX+i;
@@ -188,8 +191,7 @@ public class PhidgetClient {
 					}
 				} catch (PhidgetException e) {
 					// TODO Auto-generated catch block
-					System.err.println("Error reading ifkit:" +e);
-					e.printStackTrace(System.err);
+					logger.error("Error reading ifkit:" +e, e);
 				}
 			}
 
@@ -199,7 +201,7 @@ public class PhidgetClient {
 			@Override
 			public void detached(DetachEvent arg0) {
 				// TODO Auto-generated method stub
-				System.out.println("interfacekit "+id+" detached");
+				logger.info("interfacekit "+id+" detached");
 			}
 		});
 		
@@ -218,7 +220,7 @@ public class PhidgetClient {
 		final String prefix = configuration.findPropertiesKey(RFID_PREFIX, String.valueOf(id));
 		final String name = configuration.getProperty(prefix+Configuration.NAME_SUFFIX, "undefined");
 
-		System.out.println("Added RFID "+id+" ("+name+")");
+		logger.info("Added RFID "+id+" ("+name+")");
 
 		final String valueid = RFID_PREFIX+id;
 		Value val = values.getValue(valueid);
@@ -233,7 +235,7 @@ public class PhidgetClient {
 
 				@Override
 				public void tagGained(TagGainEvent tge) {
-					//System.out.println("Gained tag "+tge.getValue()+" on "+id);
+					//logger.debug("Gained tag "+tge.getValue()+" on "+id);
 					values.setValue(valueid, tge.getValue());
 				}
 			});
@@ -241,7 +243,7 @@ public class PhidgetClient {
 
 				@Override
 				public void tagLost(TagLossEvent tge) {
-					//System.out.println("Lost tag "+tge.getValue()+" on "+id);
+					//logger.debug("Lost tag "+tge.getValue()+" on "+id);
 					values.setValue(valueid, null);
 
 				}
@@ -252,7 +254,7 @@ public class PhidgetClient {
 			@Override
 			public void attached(AttachEvent ae) {
 				// TODO Auto-generated method stub
-				System.out.println("RFID "+id+" attached");
+				logger.info("RFID "+id+" attached");
 				synchronized(phidgets) {
 					phidgets.put(id, rfid);
 				}
@@ -269,7 +271,7 @@ public class PhidgetClient {
 			@Override
 			public void detached(DetachEvent arg0) {
 				// TODO Auto-generated method stub
-				System.out.println("RFID "+id+" detached");
+				logger.info("RFID "+id+" detached");
 			}
 		});
 
@@ -286,7 +288,7 @@ public class PhidgetClient {
 			configuration = new Configuration();
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
-			System.err.println("Error reading configuration: "+e);
+			logger.error("Error reading configuration: "+e);
 			System.exit(-1);
 		}
 		run(args, new ValueSet(new Object()), configuration);
@@ -319,7 +321,7 @@ public class PhidgetClient {
 				sb.append("; ");
 			}
 			catch (Exception e) {
-				System.out.println("Error getting local host: "+e);
+				logger.error("Error getting local host: "+e);
 				sb.append("unknown; ");
 			}
 			try {
@@ -336,7 +338,7 @@ public class PhidgetClient {
 				}
 			}
 			catch (Exception e) {
-				System.out.println("Error getting local host: "+e);
+				logger.error("Error getting local host: "+e);
 				sb.append("unknown; ");
 			}
 			return sb.toString();
@@ -361,10 +363,10 @@ public class PhidgetClient {
 			
 			String serverProp = configuration.getProperty(PHIDGET_SERVER, null);
 			final String serverID = (args.length>0 ? args[0] : serverProp); //"mrlphidgetsbc1";
-			System.out.println("using phidget.server "+serverID);
+			logger.info("using phidget.server "+serverID);
 			
 			Manager man;
-			System.out.println(Phidget.getLibraryVersion());
+			logger.info(Phidget.getLibraryVersion());
 
 			new TimerThread().start();
 			
@@ -372,7 +374,7 @@ public class PhidgetClient {
 			man.addAttachListener(new AttachListener()
 			{
 				public void attached(AttachEvent ae) {
-					System.out.println("attachment of " + ae);
+					logger.debug("attachment of " + ae);
 					try {
 						final Phidget phid = ae.getSource();
 						final int id = phid.getSerialNumber();
@@ -386,8 +388,7 @@ public class PhidgetClient {
 						}
 					} catch (PhidgetException e) {
 						// TODO Auto-generated catch block
-						System.err.println("Error attach: "+e);
-						e.printStackTrace(System.err);
+						logger.error("Error attach: "+e, e);
 					}
 					
 				}
@@ -396,7 +397,7 @@ public class PhidgetClient {
 			man.addDetachListener(new DetachListener()
 			{
 				public void detached(DetachEvent ae) {
-					System.out.println("detachment of " + ae);
+					logger.debug("detachment of " + ae);
 				}
 			});
 			try
@@ -412,7 +413,7 @@ public class PhidgetClient {
 			}
 			RFIDPollThread poll = new RFIDPollThread(phidgets);
 			poll.start();
-			System.out.println("Press any key to exit...");
+			logger.info("Press any key to exit...");
 			System.in.read();
 
 			poll.end();
@@ -422,11 +423,10 @@ public class PhidgetClient {
 			Thread.sleep(1000);
 			man = null;
 			Thread.sleep(1000);
-			System.out.println(" ok");
+			logger.info(" ok");
 			Thread.sleep(1000);
 		} catch (Exception e) {
-			System.err.println("Error: "+e);
-			e.printStackTrace(System.err);
+			logger.error("Error: "+e, e);
 		}
 	}
 }

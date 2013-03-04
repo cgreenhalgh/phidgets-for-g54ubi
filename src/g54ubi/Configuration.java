@@ -8,11 +8,15 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Properties;
 
+import org.apache.log4j.Logger;
+
 /**
  * @author cmg
  *
  */
 public class Configuration {
+	static Logger logger = Logger.getLogger(Configuration.class);
+
 	private Properties props = new Properties();
 	public static final String ID_SUFFIX = ".id";
 	public static final String NAME_SUFFIX = ".name";
@@ -20,7 +24,7 @@ public class Configuration {
 	private static final String PROPERTIES_FILE = "phidget.properties";
 
 	public Configuration() throws FileNotFoundException, IOException {
-		System.out.println("Reading properties from "+PROPERTIES_FILE);
+		logger.info("Reading properties from "+PROPERTIES_FILE);
 		//Properties props = new Properties();
 		props.load(new FileInputStream(PROPERTIES_FILE));
 	}
@@ -28,26 +32,26 @@ public class Configuration {
 	public String getProperty(String key, String defaultValue) {
 		String value = props.getProperty(key);
 		if (value==null) {
-			System.out.println("Property "+key+" = "+defaultValue+ " (default)");
+			logger.info("Property "+key+" = "+defaultValue+ " (default)");
 			return defaultValue;
 		}
-		System.out.println("Property "+key+" = "+value);
+		logger.info("Property "+key+" = "+value);
 		return value;		
 	}
 	/** get config helper */
 	public int getProperty(String key, int defaultValue) {
 		String svalue = props.getProperty(key);
 		if (svalue==null) {
-			System.out.println("Property "+key+" = "+defaultValue+ " (default)");
+			logger.info("Property "+key+" = "+defaultValue+ " (default)");
 			return defaultValue;
 		}
 		try {
 			int value = Integer.parseInt(svalue);
-			System.out.println("Property "+key+" = "+value);
+			logger.info("Property "+key+" = "+value);
 			return value;				
 		}
 		catch (NumberFormatException nfe) {
-			System.out.println("Property "+key+" = "+defaultValue+" (Invalid non-int value: "+svalue+")");
+			logger.info("Property "+key+" = "+defaultValue+" (Invalid non-int value: "+svalue+")");
 			return defaultValue;
 		}
 	}
@@ -55,16 +59,16 @@ public class Configuration {
 	public double getProperty(String key, double defaultValue) {
 		String svalue = props.getProperty(key);
 		if (svalue==null) {
-			System.out.println("Property "+key+" = "+defaultValue+ " (default)");
+			logger.info("Property "+key+" = "+defaultValue+ " (default)");
 			return defaultValue;
 		}
 		try {
 			double value = Double.parseDouble(svalue);
-			System.out.println("Property "+key+" = "+value);
+			logger.info("Property "+key+" = "+value);
 			return value;				
 		}
 		catch (NumberFormatException nfe) {
-			System.out.println("Property "+key+" = "+defaultValue+" (Invalid non-double value: "+svalue+")");
+			logger.info("Property "+key+" = "+defaultValue+" (Invalid non-double value: "+svalue+")");
 			return defaultValue;
 		}
 	}
@@ -86,10 +90,10 @@ public class Configuration {
 				break;
 		}
 		if (defaulti>=0) {
-			System.out.println("Note: using default configuration "+defaulti+" for ID "+id);
+			logger.info("Note: using default configuration "+defaulti+" for ID "+id);
 			return prefix+defaulti;
 		}
-		System.out.println("Warning: no configuration found for "+prefix+" for ID "+id);
+		logger.warn("Warning: no configuration found for "+prefix+" for ID "+id);
 		return prefix+0;
 	}
 

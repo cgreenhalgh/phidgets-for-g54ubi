@@ -3,6 +3,8 @@
  */
 package g54ubi;
 
+import org.apache.log4j.Logger;
+
 import net.user1.mariner.Mariner;
 import net.user1.mariner.MarinerEvent;
 import net.user1.mariner.MessageEvent;
@@ -12,6 +14,8 @@ import net.user1.mariner.MessageEvent;
  *
  */
 public class UnionClient {
+	static Logger logger = Logger.getLogger(UnionClient.class);
+
 	static enum State { NEW, CONNECTING, CONNECTED, FAILED }
 
 	private static final String VALUE_ATTR = "value";
@@ -68,7 +72,7 @@ public class UnionClient {
 	    // u164 CONNECTION_REFUSED
 	    mar.getMessageManager().addEventListener("u164", this, "onConnectionRefused");
 	    
-	    System.out.println("open...");
+	    logger.info("open...");
 
 	    synchronized (sync) {
 	    	synchronized (this) {
@@ -77,22 +81,22 @@ public class UnionClient {
 	    	}
 	    }
 	    mar.open(host, port);
-	    System.out.println("(open..., isReady="+mar.isReady()+")");
+	    logger.info("(open..., isReady="+mar.isReady()+")");
 	    // this should ave sent a u65 (CLIENT_HELLO)
 	    // in return we should get u66, then if OK u29 (CLIENT_METADATA: clientID), u63 (CLIENT_READY)
 	}
 	public void onConnectionShutdown(MarinerEvent evt) {
-		System.out.println("Connection shutdown");
+		logger.error("Connection shutdown");
 		close();
 	}
 	public void onSessionTerminated(MessageEvent evt) {
 		// u84 SESSION_TERMINATED
-		System.out.println("SESSION_TERMINATED!");
+		logger.error("SESSION_TERMINATED!");
 		close();
 	}
 	public void onConnectionRefused(MessageEvent evt) {
 		// u164 CONNECTION_REFUSE
-		System.out.println("CONNECTION_REFUSE!");
+		logger.error("CONNECTION_REFUSE!");
 		close();
 	}
 	public void close() {
@@ -106,12 +110,11 @@ public class UnionClient {
 			mar.close();
 		}
 		catch(Exception e) {
-			System.out.println("Error closing Mariner: "+e);
-			e.printStackTrace(System.out);
+			logger.error("Error closing Mariner: "+e, e);
 		}
 	}
 	public void onConnectionReady(MarinerEvent evt) {
-	    System.out.println("Connection ready.");
+	    logger.info("Connection ready.");
 
 	    // start polling thread doing SYNC_TIME
     	synchronized (sync) {
@@ -121,7 +124,7 @@ public class UnionClient {
 	    			sync.notifyAll();
 	    		}
 	    		else {
-	    			System.out.println("Received onConnectionReady in invalid state "+state);
+	    			logger.error("Received onConnectionReady in invalid state "+state);
 	    		}
 	    	}
 	    }
@@ -129,14 +132,14 @@ public class UnionClient {
 	public void onClientMetadata(MessageEvent evt) {
 		// u29 CLIENT_METADATA
 		// clientID
-	    System.out.println("CLIENT_METADATA: " + evt.getUPCMessage());
+	    logger.debug("CLIENT_METADATA: " + evt.getUPCMessage());
 
 	    mMyId = Integer.parseInt(evt.getUPCMessage().getArgText(0));
-	    System.out.println("ClientID = "+mMyId);
+	    logger.info("ClientID = "+mMyId);
 	}
 	public void createRoom(String roomID) {
 		// dur, CREATE_ROOM is u24
-		System.out.println("Send CREATE_ROOM...");
+		logger.debug("Send CREATE_ROOM...");
 		//roomID
 		//roomSettingName1[RS]roomSettingValue1 [RS] roomSettingNamen[RS]roomSettingValuen
 		//attrName1[RS]attrVal1[RS]attrOptions [RS] attrName2[RS]attrVal2[RS]attrOptions [RS]...attrNamen[RS]attrValn[RS]attrOptions
@@ -149,18 +152,18 @@ public class UnionClient {
 		//status SUCCESS | ROOM_EXISTS
 		String roomID = evt.getUPCMessage().getArgText(0);
 		String status = evt.getUPCMessage().getArgText(1);
-	    System.out.println("CLIENT_ROOM_RESULT: room=" + roomID + " status=" + status);
+	    logger.debug("CLIENT_ROOM_RESULT: room=" + roomID + " status=" + status);
 	    joinRoom(roomID);
 	}
 	public void joinRoom(String roomID) {
-	    System.out.println("Send JOIN_ROOM...");
+	    logger.debug("Send JOIN_ROOM...");
 	    // u3 JOIN_ROOM
 	    // roomID, password
 	    mar.getMessageManager().sendUPC("u4", roomID, "");
 	    // returns u72
 	}
 	public void setRoomAttr(String roomID, String name, String value) {
-		System.out.println("Send SET_ROOM_ATTR "+roomID+" "+name+" = "+value);
+		logger.debug("Send SET_ROOM_ATTR "+roomID+" "+name+" = "+value);
 		// u5 SET_ROOM_ATTR
 		//roomID
 		//attrName
@@ -181,7 +184,7 @@ public class UnionClient {
 		// roomID
 		// attrName
 		// status
-	    System.out.println("SET_ROOM_ATTR_RESULT: " + evt.getUPCMessage());
+	    logger.debug("SET_ROOM_ATTR_RESULT: " + evt.getUPCMessage());
     	synchronized (sync) {
     		synchronized (this) {
 	    		responseCount++;
@@ -191,7 +194,7 @@ public class UnionClient {
 	    }
 	}
 	public void syncTime() {
-		System.out.println("Send SYNC_TIME");
+		logger.debug("Send SYNC_TIME");
 		mar.getMessageManager().sendUPC("u19");
 		synchronized (this) {
 			requestCount++;
@@ -200,7 +203,7 @@ public class UnionClient {
 	public void onServerTimeUpdate(MessageEvent evt) {
 		// u50 SERVER_TIME_UPDATE
 		// timeOnServer
-		System.out.println("SERVER_TIME_UPDATE: "+evt.getUPCMessage().getArgText(0));
+		logger.info("SERVER_TIME_UPDATE: "+evt.getUPCMessage().getArgText(0));
     	synchronized (sync) {
     		synchronized (this) {
 	    		responseCount++;
@@ -214,6 +217,7 @@ public class UnionClient {
 	 * @param args
 	 */
 	public static void main(String[] args) {
+		System.out.println("Using log4j for output");
 		Object sync = new Object();
 		final ValueSet values = new ValueSet(sync);
 		Configuration configuration2 = null;
@@ -221,7 +225,7 @@ public class UnionClient {
 			configuration2 = new Configuration();
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
-			System.out.println("Error reading configuration: "+e);
+			logger.error("Error reading configuration: "+e, e);
 			System.exit(-1);
 		}
 		
@@ -257,19 +261,19 @@ public class UnionClient {
 							if (elapsed<WAIT_CONNECT_TIME)
 								sync.wait(WAIT_CONNECT_TIME-elapsed);
 							else {
-								System.out.println("Connect took too long - giving up");
+								logger.error("Connect took too long - giving up");
 								client.close();
 							}
 						} catch (InterruptedException e) {
 							// TODO Auto-generated catch block
-							System.out.println("client.wait interrupted");
+							logger.error("client.wait interrupted");
 						}
 						synchronized (client) {
 							state=client.state;
 						}
 					}
 				}
-				System.out.println("State: "+state);
+				logger.info("State: "+state);
 				long lastSendTime = System.currentTimeMillis();
 	
 				for (String valueId : values.getValueIds()) {
@@ -289,10 +293,10 @@ public class UnionClient {
 						if (state==State.CONNECTED) {
 							// check values
 							long lastUpdate = values.getLastUpdate();
-							//System.out.println("State="+state+", response="+client.responseCount+", request="+client.requestCount+", uptodate="+uptodate+", lastUpdate="+lastUpdate+", lastUpdateDone="+lastUpdateDone);
+							//logger.debug("State="+state+", response="+client.responseCount+", request="+client.requestCount+", uptodate="+uptodate+", lastUpdate="+lastUpdate+", lastUpdateDone="+lastUpdateDone);
 							if (uptodate && lastUpdate!=lastUpdateDone) {	
 								lastUpdateDone = lastUpdate;
-								System.out.println("Update to "+lastUpdate);
+								logger.debug("Update to "+lastUpdate);
 								for (String valueId : values.getValueIds()) {
 									Value value = values.getValue(valueId);
 									if (value!=null) {
@@ -325,30 +329,29 @@ public class UnionClient {
 									lastSendTime = System.currentTimeMillis();
 								}
 								else if (elapsed>WAIT_CONNECT_TIME) {
-									System.out.println("Connection timed out");
+									logger.error("Connection timed out");
 									client.close();
 								}
 								else {
 									sync.wait(100);
 								}
 							} catch (InterruptedException e) {
-								System.out.println("client.wait interrupted (2)");
+								logger.error("client.wait interrupted (2)");
 							}
 						}
 					}
 				}
 			}
 			catch(Exception e) {
-				System.out.println("Error: "+e);
-				e.printStackTrace(System.err);
+				logger.error("Error: "+e, e);
 			}
-			System.out.println("Union client failed");
+			logger.warn("Union client failed");
 			try {
 				Thread.sleep(3000);
 			}
 			catch (Exception e) {				
 			}
-			System.out.println("Union client retry...");
+			logger.info("Union client retry...");
 		}
 	}
 

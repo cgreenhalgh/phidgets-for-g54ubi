@@ -8,11 +8,15 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.log4j.Logger;
+
 /**
  * @author cmg
  *
  */
 public class ValueSet {
+	static Logger logger = Logger.getLogger(ValueSet.class);
+
 	private Object sync;
 	/** all current known values */
 	private Map<String,Value> values = new HashMap<String,Value>();
@@ -44,7 +48,7 @@ public class ValueSet {
 				if (v!=null)
 					changed = v.setValue(value);
 				else
-					System.err.println("setValue for unknown Value "+id);
+					logger.error("setValue for unknown Value "+id);
 				if (changed)
 					lastUpdate++;
 			}
@@ -60,7 +64,7 @@ public class ValueSet {
 				if (v!=null)
 					changed = v.setValue(value);
 				else
-					System.err.println("setValue for unknown Value "+id);
+					logger.error("setValue for unknown Value "+id);
 				if (changed)
 					lastUpdate++;
 			}

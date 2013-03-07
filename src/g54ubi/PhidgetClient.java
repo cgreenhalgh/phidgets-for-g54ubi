@@ -33,8 +33,11 @@ public class PhidgetClient {
 	
 	static Logger logger = Logger.getLogger(PhidgetClient.class);
 	
-	private static boolean pollRfid = true;
+	// getLastTag appears to be implicated in SEGV after a few hours of running
+	private static boolean pollRfid = false;
 
+	private static Map<String,String> currentTag = new HashMap<String,String>();
+	
 	static class RFIDPollThread extends Thread {
 		private boolean done = false;
 		private Map<Integer,Phidget> phidgets;
@@ -64,8 +67,11 @@ public class PhidgetClient {
 										// but 20ms seems very unreliable; 50ms a bit unreliable; 100ms fairly reliable.
 										wait(100);
 										count++;
+										String valueid = RFID_PREFIX+rfid.getSerialNumber();
+										String tag = null;
 										if (pollRfid) {
-											String tag = rfid.getLastTag();
+											// getLastTag appears to be implicated in SEGV after a few hours of running
+											tag = rfid.getLastTag();
 											if (!rfid.getTagStatus()) {
 												tag = null;
 											}
@@ -80,12 +86,18 @@ public class PhidgetClient {
 													}
 												}
 											}
-											if (tag!=null)
-												logger.debug("Reader "+rfid.getSerialNumber()+" tag "+tag);
-
-											String valueid = RFID_PREFIX+rfid.getSerialNumber();
-											values.setValue(valueid, tag);
 										}
+										else {
+											// use value in currentTag
+											synchronized(currentTag) {
+												tag = currentTag.get(valueid);
+											}
+										}
+										if (tag!=null)
+											logger.debug("Reader "+rfid.getSerialNumber()+" tag "+tag+" (via currentTag)");
+
+										values.setValue(valueid, tag);											
+
 										rfid.setAntennaOn(false);
 										rfid.setLEDOn(false);
 
@@ -236,7 +248,10 @@ public class PhidgetClient {
 				@Override
 				public void tagGained(TagGainEvent tge) {
 					//logger.debug("Gained tag "+tge.getValue()+" on "+id);
-					values.setValue(valueid, tge.getValue());
+					//values.setValue(valueid, tge.getValue());
+					synchronized (currentTag) {
+						currentTag.put(valueid, tge.getValue());
+					}
 				}
 			});
 			rfid.addTagLossListener(new TagLossListener() {
@@ -244,8 +259,12 @@ public class PhidgetClient {
 				@Override
 				public void tagLost(TagLossEvent tge) {
 					//logger.debug("Lost tag "+tge.getValue()+" on "+id);
-					values.setValue(valueid, null);
-
+					// Note: on slow poll Tag is lost and re-gained each cycle, so defer
+					// clear until poll over
+					//values.setValue(valueid, null);
+					synchronized (currentTag) {
+						currentTag.remove(valueid);
+					}
 				}
 			});
 		}

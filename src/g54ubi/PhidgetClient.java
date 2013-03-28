@@ -185,6 +185,11 @@ public class PhidgetClient {
 						String sensorprefix = prefix+SENSOR_INFIX+i;
 						// configure rate/sensitivity to change
 						int period = (int)(configuration.getProperty(sensorprefix+PERIOD_SUFFIX, 1.0)*1000);
+						if (period<ifkit.getDataRateMin(i))
+							period = ifkit.getDataRateMin(i);
+						if (period>ifkit.getDataRateMax(i))
+							period = ifkit.getDataRateMax(i);
+						logger.debug("Sensor "+i+" set data rate "+period);
 						ifkit.setDataRate(i, period);
 						int trigger = configuration.getProperty(sensorprefix+TRIGGER_SUFFIX, 10);
 						ifkit.setSensorChangeTrigger(i, trigger);
